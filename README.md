@@ -34,7 +34,7 @@ The system is designed to handle large volumes of calls efficiently and provide 
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/retell-ai-call-analysis.git
+   git clone https://github.com/edpowers/retell-ai-call-analysis.git
    cd retell-ai-call-analysis
    ```
 
