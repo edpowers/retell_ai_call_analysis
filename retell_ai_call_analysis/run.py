@@ -1,14 +1,20 @@
 import asyncio
+import os
+import sys
 
 import nest_asyncio
+from dotenv import load_dotenv
 
-# # Add the project root directory to Python's path
-# if not os.path.exists(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
-#     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add the project root directory to Python's path
+project_root = os.path.dirname(os.path.abspath(__file__))
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
+
+# Use relative imports from the package
 from clients.db_call_analysis_client import CallAnalysisClient
 from clients.openai_client import OpenAIClient
 from clients.retell_client import RetellClient
-from dotenv import load_dotenv
 
 nest_asyncio.apply()
 
