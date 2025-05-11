@@ -1,0 +1,121 @@
+[project]
+name = "retell-ai-call-analysis"
+version = "0.1.0"
+description = "Retell AI Call Analysis"
+readme = "README.md"
+requires-python = ">=3.12"
+
+dependencies = [
+    "nest-asyncio>=1.6.0",
+    "pandas>=2.2.3",
+    "python-dotenv>=1.1.0",
+    "retell-sdk>=4.28.0",
+    "sqlalchemy>=2.0.40",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29.5",
+    "mypy>=1.15.0",
+    "pre-commit>=4.2.0",
+    "pytest>=8.3.5",
+    "rich>=14.0.0",
+    "ruff>=0.11.9",
+    "types-pytz>=2025.2.0.20250326",
+]
+
+
+[tool.setuptools]
+packages = ["retell_ai_call_analysis"]
+# Alternatively, you can use find directive:
+# [tool.setuptools.packages.find]
+# include = ["retell_ai_call_analysis*"]
+# exclude = ["data*"]
+
+
+
+[tool.ruff]
+# Same as Black.
+line-length = 88
+# Assume Python 3.12 (matching your requires-python)
+target-version = "py312"
+
+exclude = ["test_*.py", "__init__.py", "tests/*", "_test_*.py", "*/steps/*", "*.ipynb"]
+
+lint.select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "I",   # isort
+    "UP",  # pyupgrade
+    "RUF", # ruff-specific rules
+    "W",   # pycodestyle warnings
+    "C90", # mccabe complexity
+    "S",   # flake8-bandit
+    "BLE", # flake8-blind-except
+    "FBT", # flake8-boolean-trap
+    "COM", # flake8-commas
+    "DTZ", # flake8-datetimez
+    "T10", # flake8-debugger
+    "EM",  # flake8-errmsg
+    "ICN", # flake8-import-conventions
+    "ISC", # flake8-implicit-str-concat
+    "PIE", # flake8-pie
+    "PT",  # flake8-pytest-style
+    "Q",   # flake8-quotes
+    "RSE", # flake8-raise
+    "RET", # flake8-return
+    "SLF", # flake8-self
+    "SIM", # flake8-simplify
+    "TID", # flake8-tidy-imports
+    "TCH", # flake8-type-checking
+    "PTH", # flake8-use-pathlib
+    "PD",  # pandas-vet
+]
+
+lint.ignore = [
+    "D100", # Missing docstring in public module
+    "D104", # Missing docstring in public package
+    "D107", # Missing docstring in __init__
+    "S608", # SQL Injection - we have no users.
+    "PLR0913", # Too many arguments to function call
+    "N813",  # Camelcase imports.
+    "ERA001", # Commented out code.
+    "ANN003", # Missing type annotation for kwargs.
+    "FBT001", # Boolean typed positional argument.
+    "FBT002", # Boolean typed default in function definition.
+    "PLR2004", # Comparisons with integers instead of predefined constants.
+    "PD901", # Allow generic variable names for pandas.
+    "TRY003", # Allow long messages outside of the exception block.
+    "EM101", # Allow error messages to use string literals.
+    "EM102", # Allow f-string in error messages.
+    "BLE001", # Allow blind exceptions to be caught. (Exception)
+    "ANN001", # Allow any type for variables.
+    "ANN401", # Allow dynamically typed annotations.
+    "COM812", # Causes conflicting behavior with ruff.
+    "ISC001", # Causes conflicting behavior with ruff.
+    "SLF001", # Access to private member.
+    "UP038", # Use `X | Y` in `isinstance` call instead of `(X, Y)`
+    "SIM112",  # Use capitalized environment variable.
+    "E501", # Line too long.
+    "FBT003", # Boolean typed default in function definition.
+    "PD010", # Allow certain pandas operations.
+    "RUF001", # String contains ambiguous escape sequence.
+    "PD013", # stack != melt
+    "S602", # Shell/subprocess.
+    "SIM103", # Inline condition.
+]
+
+
+
+# Allow autofix behavior for specific rules
+lint.fixable = ["ALL"]
+lint.unfixable = []
+
+
+[tool.ruff.format]
+# Let Ruff detect quote style from the file
+quote-style = "preserve"
+skip-magic-trailing-comma = false
+line-ending = "auto"
