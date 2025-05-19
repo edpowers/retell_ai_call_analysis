@@ -3,20 +3,21 @@ Client for interacting with the call analysis database.
 """
 
 import asyncio
-import datetime
 import json
 import os
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import pytz
 from clients.db_client import SQLiteClient
+from clients.make_dot_com_client import MakeDotComClient
 from clients.openai_client import ChatCompletionRequest, ChatMessage, OpenAIClient
 from clients.retell_client import RetellCall
 from clients.telegram_client import TelegramClient
-from pydantic import BaseModel
+from model.call_analysis import CallAnalysisResult
+from model.prompts import CallAnalysisPrompt
 from rich import print as rprint
+from tqdm.auto import tqdm
 
 
 class DBCallAnalysisClient:
@@ -194,168 +195,6 @@ class DBCallAnalysisClient:
             conn.commit()
 
 
-class CallAnalysisResult(BaseModel):
-    """Model for the analysis result of a call."""
-
-    call_id: str
-    timestamp: datetime.datetime
-    duration_ms: int
-    call_url: str | None = None
-    issue_type: str | None = None
-    issue_description: str | None = None
-    success_status: str = "failed"  # "success", "failed", "partial"
-    contact_info_captured: bool = False
-    booking_attempted: bool = False
-    booking_successful: bool = False
-    ai_detection_question: bool = False
-    hang_up_early: bool = False
-    dynamic_var_mismatch: bool = False
-    needs_human_review: bool = False
-    has_issue: bool = False
-    notes: str | None = None
-    transcript: str | None = None
-
-    @classmethod
-    def create_error_instance(
-        cls,
-        call_id: str,
-        timestamp: datetime.datetime,
-        duration_ms: int,
-        error: Exception,
-        call_url: str | None = None,
-    ) -> "CallAnalysisResult":
-        """
-        Create an instance representing an error during analysis.
-
-        Args:
-            call_id: The call ID
-            timestamp: The call timestamp
-            duration_ms: The call duration in milliseconds
-            error: The exception that occurred
-            call_url: URL to the call recording
-
-        Returns:
-            A CallAnalysisResult instance with error information
-        """
-        return cls(
-            call_id=call_id,
-            timestamp=timestamp,
-            duration_ms=duration_ms,
-            call_url=call_url,
-            issue_type="analysis_error",
-            issue_description=f"Error analyzing call: {error!s}",
-            success_status="failed",
-            needs_human_review=True,
-            has_issue=True,
-            notes=f"Analysis failed with error: {error!s}",
-        )
-
-    def format_for_telegram(self) -> str:
-        """
-        Format the call analysis result for Telegram messages, optimized for mobile viewing.
-
-        Returns:
-            A formatted string suitable for Telegram messages
-        """
-        message = []
-
-        # Add header information
-        message.extend(self._format_header_section())
-
-        # Add status section
-        message.extend(self._format_status_section())
-
-        # Add issue information if there is an issue
-        if self.has_issue:
-            message.extend(self._format_issues_section())
-
-        # Add key metrics section
-        message.extend(self._format_metrics_section())
-
-        # Add flags section if any flags are true
-        flags_section = self._format_flags_section()
-        if flags_section:
-            message.extend(flags_section)
-
-        # Add notes if available
-        if self.notes:
-            message.extend(self._format_notes_section())
-
-        # Join all parts with newlines
-        return "\n".join(message)
-
-    def _format_header_section(self) -> list[str]:
-        """Format the header section of the Telegram message."""
-        # Format duration from milliseconds to seconds
-        duration_sec = round(self.duration_ms / 1000, 1)
-
-        # Format timestamp to a readable format
-        formatted_time = self.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-
-        # Create emoji indicators for boolean fields
-        status_emoji = {"success": "✅", "partial": "⚠️", "failed": "❌"}.get(
-            self.success_status, "❓"
-        )
-
-        header = [
-            f"*Call Analysis {status_emoji}*",
-            f"📅 *Date:* {formatted_time}",
-            f"⏱️ *Duration:* {duration_sec}s",
-        ]
-
-        # Add call URL if available
-        if self.call_url:
-            header.append(f"🔗 [Listen to Recording]({self.call_url})")
-
-        return header
-
-    def _format_status_section(self) -> list[str]:
-        """Format the status section of the Telegram message."""
-        return ["\n*Status:*", f"📊 *Outcome:* {self.success_status.capitalize()}"]
-
-    def _format_issues_section(self) -> list[str]:
-        """Format the issues section of the Telegram message."""
-        issues = ["\n*Issues:*"]
-
-        if self.issue_type:
-            issues.append(
-                f"🚨 *Type:* {self.issue_type.replace('_', ' ').capitalize()}"
-            )
-        if self.issue_description:
-            issues.append(f"📝 *Description:* {self.issue_description}")
-
-        return issues
-
-    def _format_metrics_section(self) -> list[str]:
-        """Format the key metrics section of the Telegram message."""
-        return [
-            "\n*Key Metrics:*",
-            f"📞 *Contact Info:* {'✅ Captured' if self.contact_info_captured else '❌ Not captured'}",
-            f"📅 *Booking:* {'✅ Successful' if self.booking_successful else '❌ Not successful'}",
-        ]
-
-    def _format_flags_section(self) -> list[str]:
-        """Format the flags section of the Telegram message."""
-        flags = []
-
-        if self.ai_detection_question:
-            flags.append("🤖 AI detection question")
-        if self.hang_up_early:
-            flags.append("📴 Hung up early")
-        if self.dynamic_var_mismatch:
-            flags.append("🔄 Dynamic variable mismatch")
-        if self.needs_human_review:
-            flags.append("👁️ Needs human review")
-
-        if flags:
-            return ["\n*Flags:*", *flags]
-        return []
-
-    def _format_notes_section(self) -> list[str]:
-        """Format the notes section of the Telegram message."""
-        return ["\n*Notes:*", f"{self.notes}"]
-
-
 class CallAnalysisClient:
     def __init__(self, db_path: str, openai_client: OpenAIClient):
         self.db_client = DBCallAnalysisClient(db_path)
@@ -364,6 +203,10 @@ class CallAnalysisClient:
         self.db_client.create_table_if_not_exists()
 
         self.telegram_client = TelegramClient()
+
+        self.call_analysis_prompt = CallAnalysisPrompt()
+
+        self.make_dot_com_client = MakeDotComClient()
 
     def extract_transcript(self, call: RetellCall) -> str:
         """
@@ -421,94 +264,6 @@ class CallAnalysisClient:
 
         return tool_calls
 
-    def create_analysis_prompt(
-        self,
-        transcript: str,
-        dynamic_vars: dict[str, Any],
-        tool_calls: list[dict[str, Any]],
-    ) -> str:
-        """
-        Create a prompt for OpenAI to analyze the call.
-
-        Args:
-            transcript: The call transcript
-            dynamic_vars: Dictionary of dynamic variables
-            tool_calls: List of tool call dictionaries
-
-        Returns:
-            A formatted prompt string for OpenAI
-        """
-        prompt = """
-Please analyze this call transcript and identify any issues based on the following criteria:
-
-1. Dynamic Variable Mismatch: Check if the details in retell_llm_dynamic_variables match what's mentioned by the user in the transcript. Only flag this if the user explicitly provided information that contradicted the dynamic variables, not if the user didn't provide information at all. Ignore any information provided by the agent.
-2. Early Hang-up: Determine if the user hung up before the agent could complete their task.
-3. Contact Information Issues: Check if the agent had trouble understanding the user's contact information.
-4. AI Detection: Check if the user asked if the agent was an AI/robot.
-5. Booking Issues: Determine if the call was nearly successful but the agent wasn't able to book properly.
-6. Wrong Business Type: Check if the call was made to a non-dental business (e.g., law office, restaurant, etc.). We should only be calling dental clinics.
-7. Doctor Not Found: Check if the call was made to a dental clinic but the specific doctor mentioned in the dynamic variables doesn't work there.
-
-Dynamic Variables:
-{dynamic_vars}
-
-
-Tool Calls:
-{tool_calls}
-
-
-Transcript:
-{transcript}
-
-Provide your analysis in JSON format with the following fields:
-- issue_type: The primary type of issue (one of: "dynamic_var_mismatch", "early_hang_up", "contact_info_issue", "ai_detection", "booking_issue", "wrong_business_type", "doctor_not_found", "other", or null if successful)
-- issue_description: A brief description of the specific issue
-- success_status: "success", "failed", or "partial"
-- contact_info_captured: boolean indicating if contact information was successfully captured
-- booking_attempted: boolean indicating if booking was attempted
-- booking_successful: boolean indicating if booking was successful
-- ai_detection_question: boolean indicating if user asked if agent was AI
-- hang_up_early: boolean indicating if user hung up early
-- dynamic_var_mismatch: boolean indicating if there was a mismatch between dynamic variables and user-provided information
-- needs_human_review: boolean indicating if this call requires manual review by a human
-- has_issue: boolean indicating if any issues were detected in the call
-- notes: Any additional observations
-
-For the issue_type field:
-- Use "wrong_business_type" ONLY if there's explicit evidence that the business is not a dental clinic (e.g., they clearly state they are a law office, restaurant, etc.)
-- IMPORTANT: Assume all businesses are dental clinics unless explicitly stated otherwise. Business names like "GoDent" or similar should be assumed to be dental clinics.
-- Use "doctor_not_found" if the business is a dental clinic but the specific doctor mentioned in the dynamic variables doesn't work there
-- Both "wrong_business_type" and "doctor_not_found" should be considered serious errors and should always set has_issue to true and needs_human_review to true
-
-For the dynamic_var_mismatch field:
-- Set to true ONLY if the user explicitly provided information that contradicted the dynamic variables
-- Set to false if the user didn't provide information or if the information matches the dynamic variables
-- IMPORTANT: Only consider information provided by the user, not information stated by the agent
-
-For the needs_human_review field, set it to true ONLY if:
-- There are complex issues that AI might not fully understand
-- The call outcome is ambiguous and requires human judgment
-- There are potential technical problems that need human verification
-- The booking process had errors but contact information was captured and there's a chance for follow-up
-- There's evidence of a system malfunction or unexpected behavior
-- The call was made to a wrong business type (non-dental business)
-- The doctor mentioned in the dynamic variables doesn't work at the dental clinic
-
-Do NOT set needs_human_review to true for:
-- Simple failed calls where the user didn't provide information
-- Voicemails or messages left with no user interaction
-- Calls that went to voicemail, even if there's uncertainty about whether the doctor works at the clinic
-- Routine hang-ups or disconnections
-- Cases where the outcome is clear (either clearly successful or clearly failed)
-
-For the has_issue field, set it to true if any issues were detected that affected the call outcome.
-"""
-        return prompt.format(
-            transcript=transcript,
-            dynamic_vars=json.dumps(dynamic_vars, indent=2),
-            tool_calls=json.dumps(tool_calls, indent=2),
-        )
-
     async def process_calls(
         self,
         calls: list[RetellCall],
@@ -539,11 +294,13 @@ For the has_issue field, set it to true if any issues were detected that affecte
 
         # Analyze each call
         results = []
-        for call in new_calls:
+        for call in tqdm(new_calls):
             try:
                 analysis_json = await self.analyze_call(call)
 
-                analysis_result = self.create_analysis_result(call, analysis_json)
+                analysis_result = CallAnalysisResult.create_analysis_result(
+                    call, analysis_json
+                )
 
                 if show_verbose_output:
                     rprint(analysis_result.model_dump())
@@ -551,17 +308,16 @@ For the has_issue field, set it to true if any issues were detected that affecte
                 results.append(analysis_result.model_dump())
             except Exception as e:
                 print(f"Error analyzing call {call.call_id}: {e}")
-                # Create timestamp from call data
-                timestamp = datetime.datetime.fromtimestamp(
-                    call.start_timestamp / 1000, tz=datetime.UTC
-                ).astimezone(pytz.timezone("US/Eastern"))
                 # Create error result
                 error_result = CallAnalysisResult.create_error_instance(
                     call_id=call.call_id,
-                    timestamp=timestamp,
+                    timestamp=CallAnalysisResult.convert_format_timestamp(
+                        call.start_timestamp
+                    ),
                     duration_ms=call.duration_ms,
                     error=e,
                     call_url=call.recording_url,
+                    phone_number=call.retell_llm_dynamic_variables["phone"],
                 )
                 results.append(error_result.model_dump())
 
@@ -574,7 +330,7 @@ For the has_issue field, set it to true if any issues were detected that affecte
             return pd.DataFrame()
 
         # Create pandas DataFrame from results
-        analysis_df = pd.DataFrame(results)
+        analysis_df = pd.DataFrame(results).drop(columns=["phone_number"])
 
         if not ignore_existing_calls:
             # Save results to database
@@ -598,7 +354,9 @@ For the has_issue field, set it to true if any issues were detected that affecte
         tool_calls = self.extract_tool_calls(call)
 
         # Prepare the analysis prompt
-        prompt = self.create_analysis_prompt(transcript, dynamic_vars, tool_calls)
+        prompt = self.call_analysis_prompt.create_analysis_prompt(
+            transcript, dynamic_vars, tool_calls
+        )
 
         # Get analysis from OpenAI
         analysis_response = await self.openai_client.chat_completion(
@@ -607,7 +365,7 @@ For the has_issue field, set it to true if any issues were detected that affecte
                 messages=[
                     ChatMessage(
                         role="system",
-                        content="You are an expert call analyzer. Analyze the call transcript and identify issues based on the criteria provided.",
+                        content=self.call_analysis_prompt.create_system_prompt(),
                     ),
                     ChatMessage(role="user", content=prompt),
                 ],
@@ -654,47 +412,6 @@ For the has_issue field, set it to true if any issues were detected that affecte
         except Exception as e:
             raise ValueError(f"Failed to parse OpenAI response: {e}") from e
 
-    def create_analysis_result(
-        self, call: RetellCall, analysis_json: dict
-    ) -> CallAnalysisResult:
-        """
-        Create a CallAnalysisResult model from the call and analysis JSON.
-
-        Args:
-            call: The RetellCall object
-            analysis_json: The parsed analysis JSON from OpenAI
-
-        Returns:
-            CallAnalysisResult object
-        """
-        # Convert timestamp from milliseconds to datetime
-        timestamp = datetime.datetime.fromtimestamp(
-            call.start_timestamp / 1000, tz=datetime.UTC
-        ).astimezone(pytz.timezone("US/Eastern"))
-
-        # Extract transcript from the call
-        transcript = self.extract_transcript(call)
-
-        return CallAnalysisResult(
-            call_id=call.call_id,
-            timestamp=timestamp,
-            duration_ms=call.duration_ms,
-            call_url=call.recording_url,
-            issue_type=analysis_json.get("issue_type"),
-            issue_description=analysis_json.get("issue_description"),
-            success_status=analysis_json.get("success_status", "failed"),
-            contact_info_captured=analysis_json.get("contact_info_captured", False),
-            booking_attempted=analysis_json.get("booking_attempted", False),
-            booking_successful=analysis_json.get("booking_successful", False),
-            ai_detection_question=analysis_json.get("ai_detection_question", False),
-            hang_up_early=analysis_json.get("hang_up_early", False),
-            dynamic_var_mismatch=analysis_json.get("dynamic_var_mismatch", False),
-            needs_human_review=analysis_json.get("needs_human_review", False),
-            has_issue=analysis_json.get("has_issue", False),
-            notes=analysis_json.get("notes"),
-            transcript=transcript,
-        )
-
     async def send_analysis_to_telegram(
         self, analysis_result: CallAnalysisResult, force_send: bool = False
     ) -> bool:
@@ -717,16 +434,12 @@ For the has_issue field, set it to true if any issues were detected that affecte
             return False
 
         # Determine which channel to send to
-        target_channel_id = None
         if (analysis_result.needs_human_review and review_channel_id) or (
             not analysis_result.needs_human_review and force_send
         ):
             target_channel_id = review_channel_id
-
-        if not target_channel_id:
-            print(
-                f"No suitable Telegram channel found for analysis result (needs_human_review={analysis_result.needs_human_review})"
-            )
+        else:
+            print(f"needs_human_review={analysis_result.needs_human_review})")
             return False
 
         try:
@@ -769,34 +482,43 @@ For the has_issue field, set it to true if any issues were detected that affecte
             ignore_existing_calls=ignore_existing_calls,
         )
 
-        if send_to_telegram and not analysis_df.empty:
-            # Convert DataFrame rows to CallAnalysisResult objects and send to Telegram
-            for _, row in analysis_df.iterrows():
-                # Create CallAnalysisResult from row data
-                analysis_result = CallAnalysisResult(
-                    call_id=row.get("call_id"),
-                    timestamp=row.get("timestamp"),
-                    duration_ms=row.get("duration_ms"),
-                    call_url=row.get("call_url"),
-                    issue_type=row.get("issue_type"),
-                    issue_description=row.get("issue_description"),
-                    success_status=row.get("success_status", "failed"),
-                    contact_info_captured=row.get("contact_info_captured", False),
-                    booking_attempted=row.get("booking_attempted", False),
-                    booking_successful=row.get("booking_successful", False),
-                    ai_detection_question=row.get("ai_detection_question", False),
-                    hang_up_early=row.get("hang_up_early", False),
-                    dynamic_var_mismatch=row.get("dynamic_var_mismatch", False),
-                    needs_human_review=row.get("needs_human_review", False),
-                    has_issue=row.get("has_issue", False),
-                    notes=row.get("notes"),
-                    transcript=row.get("transcript"),
-                )
+        if analysis_df.empty:
+            print("No new calls to process")
+            return analysis_df
 
-                # Send to Telegram
-                await self.send_analysis_to_telegram(analysis_result)
+        # Convert DataFrame rows to CallAnalysisResult objects and send to Telegram
+        for _, row in analysis_df.iterrows():
+            # Create CallAnalysisResult from row data
+            analysis_result = CallAnalysisResult(
+                call_id=row.get("call_id"),
+                timestamp=row.get("timestamp"),
+                duration_ms=row.get("duration_ms"),
+                call_url=row.get("call_url"),
+                issue_type=row.get("issue_type"),
+                issue_description=row.get("issue_description"),
+                success_status=row.get("success_status", "failed"),
+                contact_info_captured=row.get("contact_info_captured", False),
+                booking_attempted=row.get("booking_attempted", False),
+                booking_successful=row.get("booking_successful", False),
+                ai_detection_question=row.get("ai_detection_question", False),
+                hang_up_early=row.get("hang_up_early", False),
+                dynamic_var_mismatch=row.get("dynamic_var_mismatch", False),
+                needs_human_review=row.get("needs_human_review", False),
+                has_issue=row.get("has_issue", False),
+                notes=row.get("notes"),
+                transcript=row.get("transcript"),
+            )
 
-                # Add a small delay to avoid rate limiting
-                await asyncio.sleep(0.5)
+            # Create an opportunity in Make.com
+            self.make_dot_com_client.run(
+                customer_phone_number=analysis_result.phone_number,
+                needs_human_review=analysis_result.needs_human_review,
+            )
+
+            # Send to Telegram
+            await self.send_analysis_to_telegram(analysis_result)
+
+            # Add a small delay to avoid rate limiting
+            await asyncio.sleep(0.5)
 
         return analysis_df
