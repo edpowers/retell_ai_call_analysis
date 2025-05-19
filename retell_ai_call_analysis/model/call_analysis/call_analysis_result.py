@@ -5,6 +5,50 @@ from model.retell.retell_call import RetellCall
 from pydantic import BaseModel
 
 
+class DynamicVariables(BaseModel):
+    """Model for the dynamic variables of a call."""
+
+    contact_id: str
+    contact_last: str
+    phone: str
+    email: str
+    competitor: str
+
+    @classmethod
+    def from_retell_format(cls, retell_vars: dict) -> "DynamicVariables":
+        """
+        Convert from Retell's dynamic variables format to our model.
+
+        Args:
+            retell_vars: Dictionary containing dynamic variables from Retell
+
+        Returns:
+            DynamicVariables instance with normalized data
+        """
+        if not retell_vars:
+            return DynamicVariables.create_empty()
+
+        # Handle the different key naming in Retell's format
+        return cls(
+            contact_id=retell_vars.get("contactId", ""),
+            contact_last=retell_vars.get("contact_last", ""),
+            phone=retell_vars.get("phone", ""),
+            email=retell_vars.get("email", ""),
+            competitor=retell_vars.get("competitor", ""),
+        )
+
+    @classmethod
+    def create_empty(cls) -> "DynamicVariables":
+        """Create an empty DynamicVariables instance."""
+        return cls(
+            contact_id="",
+            contact_last="",
+            phone="",
+            email="",
+            competitor="",
+        )
+
+
 class CallAnalysisResult(BaseModel):
     """Model for the analysis result of a call."""
 
@@ -26,6 +70,9 @@ class CallAnalysisResult(BaseModel):
     notes: str | None = None
     transcript: str | None = None
     phone_number: str | None = None
+    dynamic_variables: DynamicVariables | None = (
+        None  # Use the DynamicVariables model instead of dict
+    )
 
     @staticmethod
     def convert_format_timestamp(start_timestamp: int) -> datetime.datetime:
@@ -67,8 +114,10 @@ class CallAnalysisResult(BaseModel):
             needs_human_review=analysis_json.get("needs_human_review", False),
             has_issue=analysis_json.get("has_issue", False),
             notes=analysis_json.get("notes"),
-            phone_number=call.retell_llm_dynamic_variables["phone"],
             transcript=call.transcript,
+            dynamic_variables=DynamicVariables.from_retell_format(
+                call.retell_llm_dynamic_variables
+            ),
         )
 
     @classmethod
@@ -105,7 +154,7 @@ class CallAnalysisResult(BaseModel):
             needs_human_review=True,
             has_issue=True,
             notes=f"Analysis failed with error: {error!s}",
-            phone_number=phone_number,
+            dynamic_variables=DynamicVariables.create_empty(),
         )
 
     def format_for_telegram(self) -> str:
@@ -188,7 +237,7 @@ class CallAnalysisResult(BaseModel):
         """Format the key metrics section of the Telegram message."""
         return [
             "\n*Key Metrics:*",
-            f"📞 *Contact Info:* {'✅ Captured' if self.contact_info_captured else '❌ Not captured'}",
+            f"�� *Contact Info:* {'✅ Captured' if self.contact_info_captured else '❌ Not captured'}",
             f"📅 *Booking:* {'✅ Successful' if self.booking_successful else '❌ Not successful'}",
         ]
 

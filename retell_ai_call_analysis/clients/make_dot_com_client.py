@@ -5,9 +5,9 @@ import os
 from typing import Any
 
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("root")
 
 
 class MakeCustomLookupResponse(BaseModel):
@@ -39,11 +39,11 @@ class MakeDotComClient:
             timeout: Request timeout in seconds
             max_retries: Maximum number of retries for failed requests
         """
-        self.customer_data_lookup_url = self._find_customer_data_lookup_url(
-            customer_data_lookup_url
+        self.customer_data_lookup_url = self._find_url(
+            customer_data_lookup_url, "MAKE_CUSTOMER_LOOKUP_URL"
         )
-        self.create_opportunity_url = self._find_create_opportunity_url(
-            create_opportunity_url
+        self.create_opportunity_url = self._find_url(
+            create_opportunity_url, "MAKE_CREATE_OPPORTUNITY_URL"
         )
         self.timeout = timeout
         self.max_retries = max_retries
@@ -53,27 +53,27 @@ class MakeDotComClient:
             timeout=timeout, transport=httpx.HTTPTransport(retries=max_retries)
         )
 
-    def _find_customer_data_lookup_url(
-        self, customer_data_lookup_url: str | None
-    ) -> str:
-        """Find the customer data lookup URL from the environment"""
-        if customer_data_lookup_url:
-            return customer_data_lookup_url
+    def _find_url(self, url: str | None, env_var_name: str) -> str:
+        """
+        Find a URL from either the provided parameter or environment variable
 
-        if customer_data_lookup_url := os.getenv("MAKE_CUSTOMER_LOOKUP_URL"):
-            return customer_data_lookup_url
+        Args:
+            url: URL provided directly to the method
+            env_var_name: Name of the environment variable to check if url is None
 
-        raise ValueError("MAKE_CUSTOMER_LOOKUP_URL is not set")
+        Returns:
+            The URL to use
 
-    def _find_create_opportunity_url(self, create_opportunity_url: str | None) -> str:
-        """Find the create opportunity URL from the environment"""
-        if create_opportunity_url:
-            return create_opportunity_url
+        Raises:
+            ValueError: If neither url nor environment variable is set
+        """
+        if url:
+            return url
 
-        if create_opportunity_url := os.getenv("MAKE_CREATE_OPPORTUNITY_URL"):
-            return create_opportunity_url
+        if env_url := os.getenv(env_var_name):
+            return env_url
 
-        raise ValueError("MAKE_CREATE_OPPORTUNITY_URL is not set")
+        raise ValueError(f"{env_var_name} is not set")
 
     def lookup_customer_data(
         self,
@@ -133,16 +133,20 @@ class MakeDotComClient:
 
     def run(
         self,
-        customer_phone_number: str,
+        customer_data: MakeCustomLookupResponse,
         needs_human_review: bool,
     ) -> None:
         """Run the client"""
         if not needs_human_review:
             return
 
-        customer_data = self.lookup_customer_data(customer_phone_number)
-
-        self.create_opportunity(customer_data)
+        try:
+            # customer_data = self.lookup_customer_data(customer_phone_number)
+            self.create_opportunity(customer_data)
+        except ValidationError as e:
+            # Then we should make a
+            logger.error(f"Error making request to Make.com: {e!s} {customer_data}")
+            raise
 
     def close(self):
         """Close the underlying HTTP client"""

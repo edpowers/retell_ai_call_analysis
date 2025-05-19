@@ -10,7 +10,7 @@ from typing import Any
 import httpx
 from pydantic import BaseModel
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("root")
 
 
 class OpenAIClientConfig(BaseModel):

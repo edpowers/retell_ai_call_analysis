@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 from dotenv import load_dotenv
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("root")
 
 
 class TelegramClient:
@@ -254,7 +254,7 @@ class TelegramClient:
 
             except (httpx.HTTPError, ValueError) as e:
                 retries, delay, should_raise = self._handle_request_exception(
-                    e, retries, delay, is_async=True
+                    e, retries, delay
                 )
                 if should_raise:
                     raise

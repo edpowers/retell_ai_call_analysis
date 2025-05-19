@@ -507,11 +507,12 @@ class CallAnalysisClient:
                 has_issue=row.get("has_issue", False),
                 notes=row.get("notes"),
                 transcript=row.get("transcript"),
+                dynamic_variables=row.get("dynamic_variables"),
             )
 
             # Create an opportunity in Make.com
             self.make_dot_com_client.run(
-                customer_phone_number=analysis_result.phone_number,
+                dynamic_variables=analysis_result.dynamic_variables,
                 needs_human_review=analysis_result.needs_human_review,
             )
 
