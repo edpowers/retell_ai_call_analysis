@@ -8,7 +8,13 @@ cd "$SCRIPT_DIR"
 
 # Create log directory if it doesn't exist
 mkdir -p "$SCRIPT_DIR/logs"
-LOG_FILE="$SCRIPT_DIR/logs/run_$(date +%Y%m%d_%H%M%S).log"
+# Create Hive-like partitioned directory structure based on current date
+YEAR=$(date +%Y)
+MONTH=$(date +%m)
+DAY=$(date +%d)
+LOG_DIR="$SCRIPT_DIR/logs/year=$YEAR/month=$MONTH/day=$DAY"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/run_$(date +%H%M%S).log"
 
 # Check if we're within the 8 AM to 8 PM EST time window
 current_hour=$(TZ="America/New_York" date +%H)
