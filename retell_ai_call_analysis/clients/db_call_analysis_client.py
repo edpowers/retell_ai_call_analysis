@@ -10,7 +10,10 @@ from typing import Any
 
 import pandas as pd
 from clients.db_client import SQLiteClient
-from clients.make_dot_com_client import MakeDotComClient
+from clients.make_dot_com_client import (
+    MakeCustomLookupResponse,
+    MakeDotComClient,
+)
 from clients.openai_client import ChatCompletionRequest, ChatMessage, OpenAIClient
 from clients.retell_client import RetellCall
 from clients.telegram_client import TelegramClient
@@ -108,8 +111,18 @@ class DBCallAnalysisClient:
         Args:
             analysis_df: Pandas DataFrame with analysis results
         """
+        # Create a copy to avoid modifying the original DataFrame
+        df_to_save = analysis_df.copy()
+
+        # Convert any dictionary columns to JSON strings
+        for column in df_to_save.columns:
+            if df_to_save[column].apply(lambda x: isinstance(x, dict)).any():
+                df_to_save[column] = df_to_save[column].apply(
+                    lambda x: json.dumps(x) if isinstance(x, dict) else x
+                )
+
         with self.db_client.connection() as conn:
-            analysis_df.to_sql(
+            df_to_save.to_sql(
                 name=self.table_name, con=conn, if_exists="append", index=False
             )
 
@@ -168,28 +181,39 @@ class DBCallAnalysisClient:
     def create_table_if_not_exists(self) -> None:
         """
         Create the call_analysis table if it doesn't exist.
+        Uses the schema defined in the CallAnalysis SQLAlchemy model.
         """
+        from retell_ai_call_analysis.db.db_model import CallAnalysis
+
+        # Map SQLAlchemy types to SQLite types
+        type_mapping = {
+            "Integer": "INTEGER",
+            "String": "TEXT",
+            "Text": "TEXT",
+            "Boolean": "BOOLEAN",
+            "DateTime": "TIMESTAMP",
+            "JSON": "TEXT",
+        }
+
+        # Extract column definitions from the SQLAlchemy model
+        columns = []
+        for column in CallAnalysis.__table__.columns:
+            col_name = column.name
+            col_type = type_mapping.get(column.type.__class__.__name__, "TEXT")
+            nullable = "" if column.nullable else "NOT NULL"
+            primary_key = "PRIMARY KEY" if column.primary_key else ""
+            unique = "UNIQUE" if column.unique else ""
+
+            columns.append(
+                f"{col_name} {col_type} {primary_key} {unique} {nullable}".strip()
+            )
+
+        # Create the table
         with self.db_client.connection() as conn:
             cursor = conn.cursor()
             cursor.execute(f"""
                 CREATE TABLE IF NOT EXISTS {self.table_name} (
-                    call_id TEXT PRIMARY KEY,
-                    timestamp TIMESTAMP,
-                    duration_ms INTEGER,
-                    call_url TEXT,
-                    issue_type TEXT,
-                    issue_description TEXT,
-                    success_status TEXT,
-                    contact_info_captured BOOLEAN,
-                    booking_attempted BOOLEAN,
-                    booking_successful BOOLEAN,
-                    ai_detection_question BOOLEAN,
-                    hang_up_early BOOLEAN,
-                    dynamic_var_mismatch BOOLEAN,
-                    needs_human_review BOOLEAN,
-                    has_issue BOOLEAN,
-                    notes TEXT,
-                    transcript TEXT
+                    {', '.join(columns)}
                 )
             """)
             conn.commit()
@@ -267,6 +291,7 @@ class CallAnalysisClient:
     async def process_calls(
         self,
         calls: list[RetellCall],
+        stop_after_n_calls: int | None = None,
         show_verbose_output: bool = False,
         ignore_existing_calls: bool = False,
     ) -> pd.DataFrame:
@@ -294,7 +319,10 @@ class CallAnalysisClient:
 
         # Analyze each call
         results = []
-        for call in tqdm(new_calls):
+        for n, call in enumerate(tqdm(new_calls)):
+            if stop_after_n_calls and n >= stop_after_n_calls:
+                break
+
             try:
                 analysis_json = await self.analyze_call(call)
 
@@ -460,6 +488,7 @@ class CallAnalysisClient:
         self,
         calls: list[RetellCall],
         show_verbose_output: bool = False,
+        stop_after_n_calls: int | None = None,
         ignore_existing_calls: bool = False,
         send_to_telegram: bool = True,
     ) -> pd.DataFrame:
@@ -480,6 +509,7 @@ class CallAnalysisClient:
             calls=calls,
             show_verbose_output=show_verbose_output,
             ignore_existing_calls=ignore_existing_calls,
+            stop_after_n_calls=stop_after_n_calls,
         )
 
         if analysis_df.empty:
@@ -512,7 +542,9 @@ class CallAnalysisClient:
 
             # Create an opportunity in Make.com
             self.make_dot_com_client.run(
-                dynamic_variables=analysis_result.dynamic_variables,
+                customer_data=MakeCustomLookupResponse.model_validate(
+                    analysis_result.dynamic_variables.model_dump()
+                ),
                 needs_human_review=analysis_result.needs_human_review,
             )
 

@@ -26,7 +26,10 @@ class RetellClient:
         self.call_responses_raw: list[Any] = []
 
     def get_calls(
-        self, days_ago: int = 7, min_duration_ms: int = 1000, limit: int = 1000
+        self,
+        days_ago: int = 7,
+        min_duration_ms: int = 1000,
+        limit: int = 1000,
     ) -> list[RetellCall]:
         """
         Get calls from the Retell API.

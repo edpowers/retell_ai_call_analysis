@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -22,8 +23,15 @@ nest_asyncio.apply()
 
 async def main(days_ago: int = 1) -> None:
     load_dotenv()
+
+    stop_after_n_calls = os.getenv("STOP_AFTER_N_CALLS", None)
+    if stop_after_n_calls:
+        stop_after_n_calls = int(stop_after_n_calls)
+
     retell_client = RetellClient()
-    call_responses = retell_client.get_calls(days_ago=days_ago)
+    call_responses = retell_client.get_calls(
+        days_ago=days_ago, limit=stop_after_n_calls or 1000
+    )
 
     # Initialize OpenAI client
     openai_client = OpenAIClient()
@@ -40,6 +48,7 @@ async def main(days_ago: int = 1) -> None:
         call_responses_filtered,
         show_verbose_output=False,
         ignore_existing_calls=False,
+        stop_after_n_calls=1,
     )
 
 
