@@ -48,7 +48,7 @@ async def main(days_ago: int = 1) -> None:
         call_responses_filtered,
         show_verbose_output=False,
         ignore_existing_calls=False,
-        stop_after_n_calls=1,
+        stop_after_n_calls=stop_after_n_calls,
     )
 
 
