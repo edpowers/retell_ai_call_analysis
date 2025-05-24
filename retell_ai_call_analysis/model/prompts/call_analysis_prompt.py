@@ -34,7 +34,6 @@ Please analyze this call transcript and identify any issues based on the followi
 4. AI Detection: Check if the user asked if the agent was an AI/robot.
 5. Booking Issues: Determine if the call was nearly successful but the agent wasn't able to book properly.
 6. Wrong Business Type: Check if the call was made to a non-dental business (e.g., law office, restaurant, etc.). We should only be calling dental clinics.
-7. Doctor Not Found: Check if the call was made to a dental clinic but the specific doctor mentioned in the dynamic variables doesn't work there.
 8. Booking Incomplete: If the user agrees to a booking but there's no confirmation that the booking was successful, set this to true.
 
 Dynamic Variables:
@@ -49,7 +48,7 @@ Transcript:
 {transcript}
 
 Provide your analysis in JSON format with the following fields:
-- issue_type: The primary type of issue (one of: "dynamic_var_mismatch", "early_hang_up", "contact_info_issue", "ai_detection", "booking_issue", "wrong_business_type", "doctor_not_found", "booking_incomplete", "other", or null if successful)
+- issue_type: The primary type of issue (one of: "dynamic_var_mismatch", "early_hang_up", "contact_info_issue", "ai_detection", "booking_issue", "wrong_business_type", "booking_incomplete", "other", or null if successful)
 - issue_description: A brief description of the specific issue
 - success_status: "success", "failed", or "partial"
 - contact_info_captured: boolean indicating if contact information was successfully captured
@@ -65,8 +64,7 @@ Provide your analysis in JSON format with the following fields:
 For the issue_type field:
 - Use "wrong_business_type" ONLY if there's explicit evidence that the business is not a dental clinic (e.g., they clearly state they are a law office, restaurant, etc.)
 - IMPORTANT: Assume all businesses are dental clinics unless explicitly stated otherwise. Business names like "GoDent" or similar should be assumed to be dental clinics.
-- Use "doctor_not_found" if the business is a dental clinic but the specific doctor mentioned in the dynamic variables doesn't work there
-- Both "wrong_business_type" and "doctor_not_found" should be considered serious errors and should always set has_issue to true and needs_human_review to true
+- Both "wrong_business_type" and "booking_incomplete" should be considered serious errors and should always set has_issue to true and needs_human_review to true
 
 For the dynamic_var_mismatch field:
 - Set to true ONLY if the user explicitly provided information that contradicted the dynamic variables
@@ -80,7 +78,6 @@ For the needs_human_review field, set it to true ONLY if:
 - The booking process had errors but contact information was captured and there's a chance for follow-up
 - There's evidence of a system malfunction or unexpected behavior
 - The call was made to a wrong business type (non-dental business)
-- The doctor mentioned in the dynamic variables doesn't work at the dental clinic
 
 Do NOT set needs_human_review to true for:
 - Simple failed calls where the user didn't provide information
