@@ -96,7 +96,14 @@ class DBCallAnalysisClient:
             List of RetellCall objects that don't exist in the database
         """
         existing_call_ids = self.get_existing_call_ids()
-        new_calls = [call for call in calls if call.call_id not in existing_call_ids]
+        new_calls = [
+            call
+            for call in calls
+            if (
+                call.call_id not in existing_call_ids
+                and not call.call_analysis.get("in_voicemail")
+            )
+        ]
 
         print(f"Found {len(calls)} total calls")
         print(f"Filtered out {len(calls) - len(new_calls)} existing calls")
