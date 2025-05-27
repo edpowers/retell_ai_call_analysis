@@ -34,6 +34,10 @@ Please analyze this call transcript and identify any issues based on the followi
 4. AI Detection: Check if the user asked if the agent was an AI/robot.
 5. Booking Issues: Determine if the call was nearly successful but the agent wasn't able to book properly.
 6. Booking Incomplete: If the user agrees to a booking but there's no confirmation that the booking was successful, set this to true.
+    - A receptionist taking a message is not an incomplete booking
+    - A doctor not being available is not an incomplete booking
+    - A call that goes to voicemail is not an incomplete booking
+    - A call back is not an incomplete booking
 
 Dynamic Variables:
 {dynamic_vars}
@@ -47,7 +51,7 @@ Transcript:
 {transcript}
 
 Provide your analysis in JSON format with the following fields:
-- issue_type: The primary type of issue (one of: "dynamic_var_mismatch", "early_hang_up", "contact_info_issue", "ai_detection", "booking_issue", "wrong_business_type", "booking_incomplete", "other", or null if successful)
+- issue_type: The primary type of issue (one of: "dynamic_var_mismatch", "early_hang_up", "contact_info_issue", "ai_detection", "booking_issue", "booking_incomplete", "other", or null if successful)
 - issue_description: A brief description of the specific issue
 - success_status: "success", "failed", or "partial"
 - contact_info_captured: boolean indicating if contact information was successfully captured
@@ -61,9 +65,8 @@ Provide your analysis in JSON format with the following fields:
 - notes: Any additional observations
 
 For the issue_type field:
-- Use "wrong_business_type" ONLY if there's explicit evidence that the business is not a dental clinic (e.g., they clearly state they are a law office, restaurant, etc.)
 - IMPORTANT: Assume all businesses are dental clinics unless explicitly stated otherwise. Business names like "GoDent" or similar should be assumed to be dental clinics.
-- Both "wrong_business_type" and "booking_incomplete" should be considered serious errors and should always set has_issue to true and needs_human_review to true
+- "booking_incomplete" should be considered serious errors and should always set has_issue to true and needs_human_review to true
 
 For the dynamic_var_mismatch field:
 - Set to true ONLY if the user explicitly provided information that contradicted the dynamic variables

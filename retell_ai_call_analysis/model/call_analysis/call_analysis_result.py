@@ -188,6 +188,10 @@ class CallAnalysisResult(BaseModel):
         if self.notes:
             message.extend(self._format_notes_section())
 
+        # Add dynamic variables section if available
+        if self.dynamic_variables:
+            message.extend(self._format_dynamic_variables_section())
+
         # Join all parts with newlines
         return "\n".join(message)
 
@@ -208,6 +212,7 @@ class CallAnalysisResult(BaseModel):
             f"*Call Analysis {status_emoji}*",
             f"📅 *Date:* {formatted_time}",
             f"⏱️ *Duration:* {duration_sec}s",
+            f"*Call ID:* {self.call_id}",
         ]
 
         # Add call URL if available
@@ -257,6 +262,31 @@ class CallAnalysisResult(BaseModel):
         if flags:
             return ["\n*Flags:*", *flags]
         return []
+
+    def _format_dynamic_variables_section(self) -> list[str]:
+        """Format the dynamic variables section of the Telegram message."""
+        if not self.dynamic_variables:
+            return []
+
+        # Start with section header
+        variables = ["\n*Dynamic Variables:*"]
+
+        # Add each non-empty variable with an appropriate emoji
+        var_emojis = {
+            "contact_id": "👤",
+            "contact_last": "📛",
+            "phone": "📱",
+            "email": "📧",
+            "competitor": "🏢",
+        }
+
+        for key, value in self.dynamic_variables.model_dump().items():
+            if value:  # Only include non-empty values
+                emoji = var_emojis.get(key, "📌")
+                formatted_key = key.replace("_", " ").title()
+                variables.append(f"{emoji} *{formatted_key}:* {value}")
+
+        return variables
 
     def _format_notes_section(self) -> list[str]:
         """Format the notes section of the Telegram message."""
