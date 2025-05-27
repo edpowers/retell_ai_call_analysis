@@ -33,8 +33,7 @@ Please analyze this call transcript and identify any issues based on the followi
 3. Contact Information Issues: Check if the agent had trouble understanding the user's contact information.
 4. AI Detection: Check if the user asked if the agent was an AI/robot.
 5. Booking Issues: Determine if the call was nearly successful but the agent wasn't able to book properly.
-6. Wrong Business Type: Check if the call was made to a non-dental business (e.g., law office, restaurant, etc.). We should only be calling dental clinics.
-8. Booking Incomplete: If the user agrees to a booking but there's no confirmation that the booking was successful, set this to true.
+6. Booking Incomplete: If the user agrees to a booking but there's no confirmation that the booking was successful, set this to true.
 
 Dynamic Variables:
 {dynamic_vars}
@@ -77,7 +76,6 @@ For the needs_human_review field, set it to true ONLY if:
 - There are potential technical problems that need human verification
 - The booking process had errors but contact information was captured and there's a chance for follow-up
 - There's evidence of a system malfunction or unexpected behavior
-- The call was made to a wrong business type (non-dental business)
 
 Do NOT set needs_human_review to true for:
 - Simple failed calls where the user didn't provide information
