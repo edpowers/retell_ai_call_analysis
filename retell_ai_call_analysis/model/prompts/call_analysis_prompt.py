@@ -33,11 +33,11 @@ Please analyze this call transcript and identify any issues based on the followi
 3. Contact Information Issues: Check if the agent had trouble understanding the user's contact information.
 4. AI Detection: Check if the user asked if the agent was an AI/robot.
 5. Booking Issues: Determine if the call was nearly successful but the agent wasn't able to book properly.
-6. Booking Incomplete: If the user agrees to a booking but there's no confirmation that the booking was successful, set this to true.
-    - A receptionist taking a message is not an incomplete booking
-    - A doctor not being available is not an incomplete booking
-    - A call that goes to voicemail is not an incomplete booking
-    - A call back is not an incomplete booking
+6. Booking Incomplete: If the user is a doctor/office manager and agrees to a booking but there's no confirmation that the booking was successful, set this to true.
+    - A receptionist taking a message is not a booking incomplete - not an issue
+    - A doctor not being available is not an incomplete booking - not an issue
+    - A call that goes to voicemail is not an incomplete booking - not an issue
+    - A call back is not an incomplete booking - not an issue
 
 Dynamic Variables:
 {dynamic_vars}
@@ -83,6 +83,7 @@ For the needs_human_review field, set it to true ONLY if:
 Do NOT set needs_human_review to true for:
 - Simple failed calls where the user didn't provide information
 - Voicemails or messages left with no user interaction
+- When the agent left a message for the user to call back.
 - Calls that went to voicemail, even if there's uncertainty about whether the doctor works at the clinic
 - Routine hang-ups or disconnections
 - Cases where the outcome is clear (either clearly successful or clearly failed)
